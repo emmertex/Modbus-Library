@@ -1,19 +1,12 @@
-/* 
- * File:   Modbus.h
- * Author: Administrator
- *
- * Created on August 19, 2013, 9:47 AM
- */
-
-
-
-#ifdef	__cplusplus
-extern "C" {
-#endif
-
 /*
-    Mudbus.h - an Arduino library for a Modbus TCP slave.
-    Copyright (C) 2011  Dee Wykoff
+    Modbus.c - a Modbus TCP Slave Library for Netcruzer (PIC24)
+    EMMERTEX - Andrew Frahn
+    https://github.com/emmertex/Modbus-Library/
+
+    Ported from Siamects variation of Mudbus.cpp by Dee Wykoff
+    Arduino Library - http://gitorious.org/mudbus
+
+
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -33,10 +26,8 @@ extern "C" {
 
     // Removed - Arduino Libraries
 //#include "Arduino.h"
-
-//#include <SPI.h>
-//#include <Ethernet.h>
-
+#include <stdbool.h>
+#include <stdint.h>
 #ifndef Modbus_h
 #define Modbus_h
 
@@ -52,14 +43,12 @@ DON'T DO THAT!!!
 
 */
 
-#define MB_N_C_0x 8 //Max coils for Modbus is 100 due to limited memory
-#define MB_N_I_1x 8 //Max inputs for Modbus is 100 due to limited memory
-#define MB_N_IR_3x 1 //Max 16 bit input registers is 64 due to limited memory
-#define MB_N_HR_4x 64 //Max 16 bit holding registers is 64 due to limited memory
+#define MB_N_C_0x 8
+#define MB_N_I_1x 8
+#define MB_N_IR_3x 64
+#define MB_N_HR_4x 64
 #define MB_PORT 502
 
-#define Active booleans.b0
-#define JustReceivedOne booleans.b1  
 
 enum MB_FC {
     MB_FC_NONE                        = 0,
@@ -73,36 +62,26 @@ enum MB_FC {
     MB_FC_WRITE_MULTIPLE_REGISTERS_4x = 16
 };
 
-typedef union { 
-    unsigned char byte; 
-    struct { 
-        unsigned b0:1, b1:1, b2:1, b3:1, b4:1, b5:1, b6:1, b7:1; 
-    }; 
-} t_byte;
-
-
-    //void Modbus(void);
     void MBRun();
-    unsigned  MBC[MB_N_C_0x];
-    unsigned  MBI[MB_N_I_1x];
+    bool  MBC[MB_N_C_0x];
+    bool  MBI[MB_N_I_1x];
     int  MBIR[MB_N_IR_3x];
     int  MBR[MB_N_HR_4x];
-    t_byte  booleans;
-
+    bool Active;
+    bool JustReceivedOne;
     unsigned long PreviousActivityTime;
     int Runs, Reads, Writes, TotalMessageLength, MessageStart, NoOfBytesToSend;
 
-    unsigned int ByteReceiveArray[160];
-    unsigned int ByteSendArray[160];
-    unsigned int SaveArray[160];
+    uint8_t ByteReceiveArray[160];
+    uint8_t ByteSendArray[160];
+    uint8_t SaveArray[160];
     void MFSetFC(int fc);
-    void MBPopulateSendBuffer(unsigned int *SendBuffer, int NoOfBytes);
+    void MBPopulateSendBuffer(uint8_t *SendBuffer, int NoOfBytes);
     void MBbuffer_restore();
     void MBbuffer_save();
-    int word(int a, int b);
+    int word(uint8_t a, uint8_t b);
 
 
-//#endif
 
 /* Speculations on Modbus message structure:
 **********************************************
@@ -135,14 +114,6 @@ typedef union {
 **********************************************
 */
 
-
-
-
-
-
-#ifdef	__cplusplus
-}
-#endif
 
 #endif	/* MODBUS_H */
 

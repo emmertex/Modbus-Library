@@ -1,11 +1,12 @@
-#include "TCPIPConfig.h"
-
-#include "TCPIP Stack/TCPIP.h"
-
-
 /*
-    Mudbus.cpp - an Arduino library for a Modbus TCP slave.
-    Copyright (C) 2011  Dee Wykoff
+    Modbus.c - a Modbus TCP Slave Library for Netcruzer (PIC24)
+    EMMERTEX - Andrew Frahn
+    https://github.com/emmertex/Modbus-Library/
+
+    Ported from Siamects variation of Mudbus.cpp by Dee Wykoff
+    Arduino Library - http://gitorious.org/mudbus
+
+
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,11 +22,14 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* Porting Defines
- */
-#define true 1
-#define false 0
-#define millis() TickGet()*1000
+#include "TCPIPConfig.h"
+#include "TCPIP Stack/TCPIP.h"
+#include <HardwareProfile.h>
+#include "nz_debug.h"
+#include "Modbus.h"
+
+// Porting Defines (Arduino to XC8)
+ 
 #define lowByte(x)     ((unsigned char)((x)&0xFF))
 #define highByte(x)    ((unsigned char)(((x)>>8)&0xFF))
 #define bitRead(value,bit) (((value) >> (bit)) & 0x01)
@@ -33,18 +37,17 @@
 #define bitClear(value,bit) ((value) &= ~(1ul <<(bit)))
 #define bitWrite(value, bit, bitvalue) (bitvalue ? bitSet(value,bit) : bitClear(value,bit))
 int FC;
-
 #define MbDebug
 #define MbRunsDebug
-#include "Modbus.h"
+
 #if !defined(DEBUG_CONF_MODBUS)
   #define DEBUG_CONF_MODBUS     4
   #endif
   #define MY_DEBUG_LEVEL   DEBUG_CONF_MODBUS
-#include "nz_debug.h"
 
-// Removed - Arduino Class
-//EthernetServer MbServer(MB_PORT);
+
+long unsigned int getTick16bit_1ms();
+void MBSetFC(int fc);
 
 void MBRun()
 {
@@ -81,14 +84,15 @@ void MBRun()
         if(!Active)
         {
             Active = true;
-            PreviousActivityTime = millis();
+            PreviousActivityTime = getTick16bit_1ms();
 #ifdef MbDebug
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb active\n");
 #endif
         }
     }
     */
-    if(millis() > (PreviousActivityTime + 60000))
+
+    if(getTick16bit_1ms() > (PreviousActivityTime + 60000))
     {
         if(Active)
         {
@@ -348,7 +352,7 @@ void MBRun()
                     DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
                 }
 #endif
- ////////////////////////////////////////////////////////////////////////////////////              client.write(ByteSendArray,NoOfBytesToSend);
+ ///////              client.write(ByteSendArray,NoOfBytesToSend);
 #ifdef MbDebug
                 DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " sent\n");
 #endif
@@ -404,7 +408,7 @@ void MBbuffer_restore()
 }
 
 
-void MBPopulateSendBuffer(unsigned int *SendBuffer, int NoOfBytes)
+void MBPopulateSendBuffer(uint8_t *SendBuffer, int NoOfBytes)
 {
     int i;
     i=0;
@@ -466,7 +470,7 @@ void MBSetFC(int fc)
 
 // Add Arduino Function
 
-int word(int high, int low)
+int word(uint8_t high, uint8_t low)
 {
     int result;
     result = (high * 256) + low;
