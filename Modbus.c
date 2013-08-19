@@ -34,13 +34,17 @@
 #define bitWrite(value, bit, bitvalue) (bitvalue ? bitSet(value,bit) : bitClear(value,bit))
 int FC;
 
-//#define MbDebug
-//#define MbRunsDebug
+#define MbDebug
+#define MbRunsDebug
 #include "Modbus.h"
+#if !defined(DEBUG_CONF_MODBUS)
+  #define DEBUG_CONF_MODBUS     4
+  #endif
+  #define MY_DEBUG_LEVEL   DEBUG_CONF_MODBUS
+#include "nz_debug.h"
 
 // Removed - Arduino Class
 //EthernetServer MbServer(MB_PORT);
-
 
 void MBRun()
 {
@@ -63,12 +67,13 @@ void MBRun()
         MessageStart = 0;
 #ifdef MbDebug
         for (i=0; i<TotalMessageLength; i++) {
-            Serial.print(ByteReceiveArray[i],HEX);
-            Serial.print(" ");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteReceiveArray[i],HEX);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
         }
-        Serial.println(" received");
-        Serial.print("MessageLength = ");
-        Serial.println(TotalMessageLength);
+        DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " received\n");
+        DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "MessageLength = ");
+        DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, TotalMessageLength);
+        DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
         MBSetFC(ByteReceiveArray[7]);  //Byte 7 of request is FC
         JustReceivedOne = true;
@@ -77,7 +82,7 @@ void MBRun()
             Active = true;
             PreviousActivityTime = millis();
 #ifdef MbDebug
-            Serial.println("Mb active");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb active\n");
 #endif
         }
     }
@@ -88,7 +93,7 @@ void MBRun()
         {
             Active = false;
 #ifdef MbDebug
-            Serial.println("Mb not active");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb not active\n");
 #endif
         }
     }
@@ -105,14 +110,15 @@ void MBRun()
             if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
             CoilDataLength = ByteDataLength * 8;
 #ifdef MbDebug
-            Serial.print(" MB_FC_READ_COILS_0x S=");
-            Serial.print(Start);
-            Serial.print(" L=");
-            Serial.println(CoilDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_READ_COILS_0x S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, CoilDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //Number of bytes after this one.
-            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //Number of bytes after this one (or number of bytes of data).
+            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
+            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
             for(i = 0; i < ByteDataLength ; i++)
             {
 
@@ -137,14 +143,15 @@ void MBRun()
             if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
             CoilDataLength = ByteDataLength * 8;
 #ifdef MbDebug
-            Serial.print(" MB_FC_READ_INPUTS_1x S=");
-            Serial.print(Start);
-            Serial.print(" L=");
-            Serial.println(CoilDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_READ_INPUTS_1x S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, CoilDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //Number of bytes after this one.
-            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //Number of bytes after this one (or number of bytes of data).
+            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
+            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
             int i,j;
             for(i = 0; i < ByteDataLength ; i++)
             {
@@ -167,14 +174,15 @@ void MBRun()
             WordDataLength = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             ByteDataLength = WordDataLength * 2;
 #ifdef MbDebug
-            Serial.print(" MB_FC_READ_REGISTERS_4x S=");
-            Serial.print(Start);
-            Serial.print(" L=");
-            Serial.println(WordDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_READ_REGISTERS_4x S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, WordDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //Number of bytes after this one.
-            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //Number of bytes after this one (or number of bytes of data).
+            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
+            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
             int i;
             for(i = 0; i < WordDataLength; i++)
             {
@@ -195,14 +203,15 @@ void MBRun()
             WordDataLength = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             ByteDataLength = WordDataLength * 2;
 #ifdef MbDebug
-            Serial.print(" MB_FC_READ_INPUT_REGISTERS_3x S=");
-            Serial.print(Start);
-            Serial.print(" L=");
-            Serial.println(WordDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_READ_INPUT_REGISTERS_3x S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, WordDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //Number of bytes after this one.
-            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //Number of bytes after this one (or number of bytes of data).
+            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
+            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
             int i;
             for(i = 0; i < WordDataLength; i++)
             {
@@ -224,12 +233,13 @@ void MBRun()
             Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
             MBC[Start] = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]) > 0;
 #ifdef MbDebug
-            Serial.print(" MB_FC_WRITE_COIL_0x C");
-            Serial.print(Start);
-            Serial.print("=");
-            Serial.println(C[Start]);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_WRITE_COIL_0x C");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBC[Start]);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
-            ByteReceiveArray[5 + MessageStart] = 6; //Number of bytes after this one.
+            ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
             Writes = 1 + Writes * (Writes < 999);
@@ -242,12 +252,13 @@ void MBRun()
             Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
             MBR[Start] = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
 #ifdef MbDebug
-            Serial.print(" MB_FC_WRITE_REGISTER_4x R");
-            Serial.print(Start);
-            Serial.print("=");
-            Serial.println(R[Start]);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_WRITE_REGISTER_4x R");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBR[Start]);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
-            ByteReceiveArray[5 + MessageStart] = 6; //Number of bytes after this one.
+            ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
             Writes = 1 + Writes * (Writes < 999);
@@ -264,13 +275,14 @@ void MBRun()
             if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
             CoilDataLength = ByteDataLength * 8;
 #ifdef MbDebug
-            Serial.print(" MB_FC_WRITE_MULTIPLE_COILS_0x S=");
-            Serial.print(Start);
-            Serial.print(" L=");
-            Serial.println(CoilDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_WRITE_MULTIPLE_COILS_0x S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, CoilDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = 6; //Number of bytes after this one.
+            ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             int i,j;
             for(i = 0; i < ByteDataLength ; i++)
             {
@@ -294,13 +306,14 @@ void MBRun()
             WordDataLength = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             ByteDataLength = WordDataLength * 2;
 #ifdef MbDebug
-            Serial.print(" MB_FC_WRITE_MULTIPLE_REGISTERS_4x S=");
-            Serial.print(Start);
-            Serial.print(" L=");
-            Serial.println(WordDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_WRITE_MULTIPLE_REGISTERS_4x S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, WordDataLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = 6; //Number of bytes after this one.
+            ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             int i;
             for(i = 0; i < WordDataLength; i++)
             {
@@ -318,8 +331,9 @@ void MBRun()
             
             MessageStart = MessageStart + 6 + ByteReceiveArray[5 + MessageStart];
 #ifdef MbDebug
-            Serial.print("/n Next start = ");
-            Serial.println(MessageStart);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n Next start = ");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MessageStart);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
             if (MessageStart+5<TotalMessageLength) MBSetFC(ByteReceiveArray[7 + MessageStart]);
             else {
@@ -328,24 +342,26 @@ void MBRun()
 
 #ifdef MbDebug
                 for (i=0; i<NoOfBytesToSend; i++) {
-                    Serial.print(ByteSendArray[i],HEX);
-                    Serial.print(" ");
+                    //DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteSendArray[i],HEX);
+                    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteSendArray[i]);
+                    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
                 }
 #endif
  ////////////////////////////////////////////////////////////////////////////////////              client.write(ByteSendArray,NoOfBytesToSend);
 #ifdef MbDebug
-                Serial.println(" sent");
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " sent\n");
 #endif
                 NoOfBytesToSend = 0;
                 MessageStart = 0;
             }
 #ifdef MbDebug
-            Serial.print("TotalMessageLength = ");
-            Serial.println(TotalMessageLength);
-            Serial.print(" MessageStart = ");
-            Serial.print(MessageStart);
-            Serial.print(" FC = ");
-            Serial.println(FC);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "TotalMessageLength = ");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, TotalMessageLength);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n MessageStart = ");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MessageStart);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " FC = ");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, FC);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 
 
 #endif
@@ -354,13 +370,13 @@ void MBRun()
     }
 
 #ifdef MbRunsDebug
-    Serial.print("Mb runs: ");
-    Serial.print(Runs);
-    Serial.print("  reads: ");
-    Serial.print(Reads);
-    Serial.print("  writes: ");
-    Serial.print(Writes);
-    Serial.println();
+    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb runs: ");
+    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Runs);
+    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "  reads: ");
+    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Reads);
+    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "  writes: ");
+    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Writes);
+    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
 #endif
 
 }
@@ -438,9 +454,9 @@ void MBSetFC(int fc)
 
 // Read FIFO queue (FC 24)  we skip this one
     else {
-       // Serial.print(" FC not supported: ");
-       // Serial.print(fc);
-       // Serial.println();
+       DEBUG_PUT_STR(DEBUG_LEVEL_ERROR, " FC not supported: ");
+       DEBUG_PUT_WORD(DEBUG_LEVEL_ERROR, fc);
+       DEBUG_PUT_STR(DEBUG_LEVEL_ERROR, "\n");
 
     }
 }
