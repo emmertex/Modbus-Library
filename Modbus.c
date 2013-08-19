@@ -67,7 +67,8 @@ void MBRun()
         MessageStart = 0;
 #ifdef MbDebug
         for (i=0; i<TotalMessageLength; i++) {
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteReceiveArray[i],HEX);
+            //DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteReceiveArray[i],HEX);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteReceiveArray[i]);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
         }
         DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " received\n");
