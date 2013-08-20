@@ -62,6 +62,16 @@ enum MB_FC {
     MB_FC_WRITE_MULTIPLE_REGISTERS_4x = 16
 };
 
+
+    /* Modbus Points are global
+     These should be able to be read and written to
+     from main.c
+     */
+    BOOL MBC[MB_N_C_0x];
+    BOOL MBI[MB_N_I_1x];
+    WORD MBIR[MB_N_IR_3x];
+    WORD MBR[MB_N_HR_4x];
+
     void MBRun();
     void MFSetFC(WORD fc);
     void MBPopulateSendBuffer(BYTE *SendBuffer, WORD NoOfBytes);

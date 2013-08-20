@@ -51,10 +51,6 @@
 WORD FC;
 BOOL Active = FALSE;
 BOOL JustReceivedOne;
-BOOL MBC[MB_N_C_0x];
-BOOL MBI[MB_N_I_1x];
-WORD MBIR[MB_N_IR_3x];
-WORD MBR[MB_N_HR_4x];
 WORD Runs, Reads, Writes, TotalMessageLength, MessageStart, NoOfBytesToSend;
 BYTE ByteReceiveArray[160];
 BYTE ByteSendArray[160];
@@ -75,6 +71,7 @@ void MBRun()
     {
     	SM_HOME = 0,
     	SM_LISTENING,
+        SM_RESPONDING,
         SM_CLOSING,
     } TCPServerState;
     static TCPServerState smMB = SM_HOME;
@@ -145,6 +142,17 @@ void MBRun()
             //TCPFlush();
 
         	break;
+
+
+       case SM_RESPONDING:
+               for (i=0; i<NoOfBytesToSend; i++) {
+                    TCPPutROMString(MySocket, (ROM BYTE*)ByteSendArray[i]);
+               }
+		TCPFlush(MySocket);
+                smMB = SM_LISTENING;
+
+            break;
+
 
     	case SM_CLOSING:
             // Close the socket connection.
@@ -382,7 +390,7 @@ void MBRun()
                     DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
                 }
 #endif
-                //client.write(ByteSendArray,NoOfBytesToSend);
+                smMB = SM_RESPONDING;
                 DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nsent");
                 NoOfBytesToSend = 0;
                 MessageStart = 0;
