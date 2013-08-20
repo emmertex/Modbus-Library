@@ -71,7 +71,7 @@ void MBRun()
     {
     	SM_HOME = 0,
     	SM_LISTENING,
-        SM_RESPONDING,
+//        SM_RESPONDING,
         SM_CLOSING,
     } TCPServerState;
     static TCPServerState smMB = SM_HOME;
@@ -143,16 +143,9 @@ void MBRun()
 
         	break;
 
-
-       case SM_RESPONDING:
-               for (i=0; i<NoOfBytesToSend; i++) {
-                    TCPPutROMString(MySocket, (ROM BYTE*)ByteSendArray[i]);
-               }
-		TCPFlush(MySocket);
-                smMB = SM_LISTENING;
-
-            break;
-
+//        case SM_RESPONDING:
+//            smMB = SM_LISTENING;
+//            break;
 
     	case SM_CLOSING:
             // Close the socket connection.
@@ -373,7 +366,6 @@ void MBRun()
             MBbuffer_restore();
         }
 
-
         if (JustReceivedOne) {
             MessageStart = MessageStart + 6 + ByteReceiveArray[5 + MessageStart];
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nNext start = ");
@@ -390,8 +382,10 @@ void MBRun()
                     DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
                 }
 #endif
-                smMB = SM_RESPONDING;
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nsent");
+                TCPPutArray(MySocket, ByteSendArray, NoOfBytesToSend);
+                TCPFlush(MySocket);
+//                smMB = SM_RESPONDING;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nSent");
                 NoOfBytesToSend = 0;
                 MessageStart = 0;
             }
