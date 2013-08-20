@@ -6,8 +6,6 @@
     Ported from Siamects variation of Mudbus.cpp by Dee Wykoff
     Arduino Library - http://gitorious.org/mudbus
 
-
-
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -25,102 +23,163 @@
 #include "TCPIPConfig.h"
 #include "TCPIP Stack/TCPIP.h"
 #include <HardwareProfile.h>
-#include "nz_debug.h"
 #include "Modbus.h"
+#include "nz_tick.h"
 
-// Porting Defines (Arduino to XC8)
- 
+//Add debugging to this file. To disable all debugging:
+// - Change "#else" part below to: "#define MY_DEBUG_LEVEL  DEBUG_LEVEL_OFF"
+// - Include following line in "Debug Configuration" section of projdefs.h file: "#define DEBUG_LEVEL_ALLOFF"
+#if defined(DEBUG_LEVEL_ALLOFF)
+    #define MY_DEBUG_LEVEL  0                   //Disable debugging if "DEBUG_LEVEL_ALLOFF" is defined
+#else
+    #define MY_DEBUG_LEVEL  DEBUG_LEVEL_INFO    //Set debug level. All debug messages with equal or higher priority will be outputted
+#endif
+#include "nz_debug.h"                           //Required for debugging. This include MUST be after "#define MY_DEBUG_LEVEL ..."!
+
+// Defines  /////////////////////////////////////
 #define lowByte(x)     ((unsigned char)((x)&0xFF))
 #define highByte(x)    ((unsigned char)(((x)>>8)&0xFF))
 #define bitRead(value,bit) (((value) >> (bit)) & 0x01)
 #define bitSet(value,bit) ((value) |= (1ul << (bit)))
 #define bitClear(value,bit) ((value) &= ~(1ul <<(bit)))
 #define bitWrite(value, bit, bitvalue) (bitvalue ? bitSet(value,bit) : bitClear(value,bit))
-int FC;
+#define bytesToWord(hb,lb) ( (((WORD)(hb&0xff))<<8) | ((WORD)lb) )
 #define MbDebug
 #define MbRunsDebug
 
-#if !defined(DEBUG_CONF_MODBUS)
-  #define DEBUG_CONF_MODBUS     4
-  #endif
-  #define MY_DEBUG_LEVEL   DEBUG_CONF_MODBUS
+// Variables  ///////////////////////////////////
+WORD FC;
+BOOL Active = FALSE;
+BOOL JustReceivedOne;
+BOOL MBC[MB_N_C_0x];
+BOOL MBI[MB_N_I_1x];
+WORD MBIR[MB_N_IR_3x];
+WORD MBR[MB_N_HR_4x];
+WORD Runs, Reads, Writes, TotalMessageLength, MessageStart, NoOfBytesToSend;
+BYTE ByteReceiveArray[160];
+BYTE ByteSendArray[160];
+BYTE SaveArray[160];
+WORD PreviousActivityTime = 0;
 
 
-long unsigned int getTick16bit_1ms();
-void MBSetFC(int fc);
+// Function Prototypes  /////////////////////////
+void MBSetFC(WORD fc);
 
 void MBRun()
 {
-    Runs = 1 + Runs * (Runs < 999);
-/*
-    //****************** Read from socket ****************
-    EthernetClient client = MbServer.available();
-    if(client.available())
+    WORD Start, WordDataLength, ByteDataLength, CoilDataLength, MessageLength, i, j;
+    static TCP_SOCKET MySocket;
+    static BOOL oldConnectionState = FALSE;
+    WORD wMaxGet;
+	typedef enum
     {
-        Reads = 1 + Reads * (Reads < 999);
-        int i = 0;
-        while(client.available())
-        {
-            ByteReceiveArray[i] = client.read();
-            i++;
+    	SM_HOME = 0,
+    	SM_LISTENING,
+        SM_CLOSING,
+    } TCPServerState;
+    static TCPServerState smMB = SM_HOME;
 
-        }
-        TotalMessageLength = i;
-        NoOfBytesToSend = 0;
-        MessageStart = 0;
-#ifdef MbDebug
-        for (i=0; i<TotalMessageLength; i++) {
-            //DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteReceiveArray[i],HEX);
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteReceiveArray[i]);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
-        }
-        DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " received\n");
-        DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "MessageLength = ");
-        DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, TotalMessageLength);
-        DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
-        MBSetFC(ByteReceiveArray[7]);  //Byte 7 of request is FC
-        JustReceivedOne = true;
-        if(!Active)
-        {
-            Active = true;
-            PreviousActivityTime = getTick16bit_1ms();
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb active\n");
-#endif
-        }
+    Runs = 1 + Runs * (Runs < 999);
+
+	switch(smMB)
+    {
+    	case SM_HOME:
+            // Allocate a socket for this server to listen and accept connections on
+        	MySocket = TCPOpen(0, TCP_OPEN_SERVER, MB_PORT, TCP_PURPOSE_DEFAULT);
+        	if(MySocket == INVALID_SOCKET)
+            	return;
+
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB Opened Socket");
+        	smMB = SM_LISTENING;
+        	break;
+
+    	case SM_LISTENING:
+            // See if anyone is connected to us
+        	if(!TCPIsConnected(MySocket)) {
+                #if (MY_DEBUG_LEVEL >= DEBUG_LEVEL_INFO)
+                if (oldConnectionState == TRUE) {
+                    oldConnectionState = FALSE;
+                    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB Disconnected");
+                }
+                #endif
+            	return;
+            }
+
+            #if (MY_DEBUG_LEVEL >= DEBUG_LEVEL_INFO)
+            if (oldConnectionState == FALSE) {
+                oldConnectionState = TRUE;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB Connected");
+            }
+            #endif
+
+            if ( (wMaxGet=TCPIsGetReady(MySocket) > 0) ) {
+                Reads = 1 + Reads * (Reads < 999);
+                WORD i = 0;
+
+                // Transfer the data out of the TCP RX FIFO and into our local processing buffer.
+            	TotalMessageLength = TCPGetArray(MySocket, ByteReceiveArray, sizeof(ByteReceiveArray));
+                NoOfBytesToSend = 0;
+                MessageStart = 0;
+        #ifdef MbDebug
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nReceived: ");
+                for (i=0; i<TotalMessageLength; i++) {
+                    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteReceiveArray[i]);
+                    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
+                }
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMessageLength = ");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, TotalMessageLength);
+        #endif
+                MBSetFC(ByteReceiveArray[7]);  //Byte 7 of request is FC
+                JustReceivedOne = TRUE;
+                if(!Active)
+                {
+                    Active = TRUE;
+                    PreviousActivityTime = getTick16bit_1ms();   //Get 16-bit, 1ms tick
+                    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb active\n");
+                }
+            }
+
+            // No need to perform any flush.  TCP data in TX FIFO will automatically transmit itself after
+            //it accumulates for a while.  If you want to decrease latency (at the expense of wasting network
+            //bandwidth on TCP overhead), perform and explicit flush via the TCPFlush() API.
+            //TCPFlush();
+
+        	break;
+
+    	case SM_CLOSING:
+            // Close the socket connection.
+            TCPClose(MySocket);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB Closed Socket");
+        	smMB = SM_HOME;
+        	break;
     }
-    */
+
+    if (Active == FALSE) {
+        return;
+    }
 
     if(getTick16bit_1ms() > (PreviousActivityTime + 60000))
     {
         if(Active)
         {
-            Active = false;
-#ifdef MbDebug
+            Active = FALSE;
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb not active\n");
-#endif
         }
     }
-
-    int Start, WordDataLength, ByteDataLength, CoilDataLength, MessageLength, i, j;
 
     while (FC != 0) {
         //**1**************** Read Coils **********************
         if(FC == MB_FC_READ_COILS_0x)
         {
-            Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            CoilDataLength = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            CoilDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             ByteDataLength = CoilDataLength / 8;
             if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
             CoilDataLength = ByteDataLength * 8;
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_READ_COILS_0x S=");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_COILS_0x S=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, CoilDataLength);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
             MBbuffer_save();
             ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
             ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
@@ -142,22 +201,19 @@ void MBRun()
         //**2**************** Read descrete Inputs **********************
         else if(FC == MB_FC_READ_INPUTS_1x)
         {
-            Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            CoilDataLength = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            CoilDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             ByteDataLength = CoilDataLength / 8;
             if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
             CoilDataLength = ByteDataLength * 8;
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_READ_INPUTS_1x S=");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_INPUTS_1x S=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, CoilDataLength);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
             MBbuffer_save();
             ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
             ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
-            int i,j;
+            WORD i,j;
             for(i = 0; i < ByteDataLength ; i++)
             {
                 for(j = 0; j < 8; j++)
@@ -175,20 +231,17 @@ void MBRun()
         //**3**************** Read Holding Registers ******************
         else if(FC == MB_FC_READ_REGISTERS_4x)
         {
-            Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            WordDataLength = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            WordDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             ByteDataLength = WordDataLength * 2;
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_READ_REGISTERS_4x S=");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_REGISTERS_4x S=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, WordDataLength);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
             MBbuffer_save();
             ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
             ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
-            int i;
+            WORD i;
             for(i = 0; i < WordDataLength; i++)
             {
                 ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(MBR[Start + i]);
@@ -204,20 +257,17 @@ void MBRun()
         //**4**************** Read Input Registers ******************
         else if(FC == MB_FC_READ_INPUT_REGISTERS_3x)
         {
-            Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            WordDataLength = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            WordDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             ByteDataLength = WordDataLength * 2;
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_READ_INPUT_REGISTERS_3x S=");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_INPUT_REGISTERS_3x S=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, WordDataLength);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
             MBbuffer_save();
             ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
             ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
-            int i;
+            WORD i;
             for(i = 0; i < WordDataLength; i++)
             {
                 ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(MBIR[Start + i]);
@@ -230,20 +280,15 @@ void MBRun()
             MBbuffer_restore();
         }
 
-
-
         //**5**************** Write Coil **********************
         else if(FC == MB_FC_WRITE_COIL_0x)
         {
-            Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            MBC[Start] = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]) > 0;
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_WRITE_COIL_0x C");
+            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            MBC[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]) > 0;
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_COIL_0x C");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBC[Start]);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
             ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -254,15 +299,12 @@ void MBRun()
         //**6**************** Write Single Register ******************
         else if(FC == MB_FC_WRITE_REGISTER_4x)
         {
-            Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            MBR[Start] = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_WRITE_REGISTER_4x R");
+            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            MBR[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_REGISTER_4x R");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBR[Start]);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
             ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -270,25 +312,21 @@ void MBRun()
             FC = MB_FC_NONE;
         }
 
-
         //**15**************** Write Multiple Coils **********************
         else if(FC == MB_FC_WRITE_MULTIPLE_COILS_0x)
         {
-            Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            CoilDataLength = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            CoilDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             ByteDataLength = CoilDataLength / 8;
             if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
             CoilDataLength = ByteDataLength * 8;
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_WRITE_MULTIPLE_COILS_0x S=");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_MULTIPLE_COILS_0x S=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, CoilDataLength);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
             MBbuffer_save();
             ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
-            int i,j;
+            WORD i,j;
             for(i = 0; i < ByteDataLength ; i++)
             {
                 for(j = 0; j < 8; j++)
@@ -303,48 +341,40 @@ void MBRun()
             MBbuffer_restore();
         }
 
-
         //**16**************** Write Multiple Registers ******************
         else if(FC == MB_FC_WRITE_MULTIPLE_REGISTERS_4x)
         {
-            Start = word(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            WordDataLength = word(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            WordDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             ByteDataLength = WordDataLength * 2;
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " MB_FC_WRITE_MULTIPLE_REGISTERS_4x S=");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_MULTIPLE_REGISTERS_4x S=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, WordDataLength);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
             MBbuffer_save();
             ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
-            int i;
+            WORD i;
             for(i = 0; i < WordDataLength; i++)
             {
-                MBR[Start + i] =  word(ByteReceiveArray[ 13 + i * 2 + MessageStart],ByteReceiveArray[14 + i * 2 + MessageStart]);
+                MBR[Start + i] =  bytesToWord(ByteReceiveArray[ 13 + i * 2 + MessageStart],ByteReceiveArray[14 + i * 2 + MessageStart]);
             }
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
             Writes = 1 + Writes * (Writes < 999);
             FC = MB_FC_NONE;
             MBbuffer_restore();
-            }
+        }
 
 
         if (JustReceivedOne) {
-            
             MessageStart = MessageStart + 6 + ByteReceiveArray[5 + MessageStart];
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n Next start = ");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nNext start = ");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MessageStart);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
-            if (MessageStart+5<TotalMessageLength) MBSetFC(ByteReceiveArray[7 + MessageStart]);
+            if (MessageStart+5<TotalMessageLength)
+                MBSetFC(ByteReceiveArray[7 + MessageStart]);
             else {
                 JustReceivedOne = false;
                 FC = MB_FC_NONE;
-
 #ifdef MbDebug
                 for (i=0; i<NoOfBytesToSend; i++) {
                     //DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteSendArray[i],HEX);
@@ -352,43 +382,31 @@ void MBRun()
                     DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
                 }
 #endif
- ///////              client.write(ByteSendArray,NoOfBytesToSend);
-#ifdef MbDebug
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " sent\n");
-#endif
+                //client.write(ByteSendArray,NoOfBytesToSend);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nsent");
                 NoOfBytesToSend = 0;
                 MessageStart = 0;
             }
-#ifdef MbDebug
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "TotalMessageLength = ");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nTotalMessageLength = ");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, TotalMessageLength);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n MessageStart = ");
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMessageStart = ");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MessageStart);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " FC = ");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, FC);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
+        }   // if (JustReceivedOne)
+    }   // while (FC != 0)
 
-
-#endif
-        }
-
-    }
-
-#ifdef MbRunsDebug
-    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb runs: ");
-    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Runs);
-    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "  reads: ");
-    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Reads);
-    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "  writes: ");
-    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Writes);
-    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\n");
-#endif
-
+//    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMb runs: ");
+//    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Runs);
+//    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "  reads: ");
+//    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Reads);
+//    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "  writes: ");
+//    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Writes);
 }
 
 void MBbuffer_save()
 {
-    int i;
+    WORD i;
     i=0;
     while(i<160)
     {
@@ -398,7 +416,7 @@ void MBbuffer_save()
 }
 void MBbuffer_restore()
 {
-    int i;
+    WORD i;
     i=0;
     while(i<160)
     {
@@ -408,9 +426,9 @@ void MBbuffer_restore()
 }
 
 
-void MBPopulateSendBuffer(uint8_t *SendBuffer, int NoOfBytes)
+void MBPopulateSendBuffer(BYTE *SendBuffer, WORD NoOfBytes)
 {
-    int i;
+    WORD i;
     i=0;
     while(i<NoOfBytes)
     {
@@ -420,7 +438,7 @@ void MBPopulateSendBuffer(uint8_t *SendBuffer, int NoOfBytes)
 
     }
 }
-void MBSetFC(int fc)
+void MBSetFC(WORD fc)
 {
 
 // Read coils (FC 1) 0x
@@ -464,15 +482,4 @@ void MBSetFC(int fc)
        DEBUG_PUT_STR(DEBUG_LEVEL_ERROR, "\n");
 
     }
-}
-
-
-
-// Add Arduino Function
-
-int word(uint8_t high, uint8_t low)
-{
-    int result;
-    result = (high * 256) + low;
-    return result;
 }

@@ -63,23 +63,11 @@ enum MB_FC {
 };
 
     void MBRun();
-    bool  MBC[MB_N_C_0x];
-    bool  MBI[MB_N_I_1x];
-    int  MBIR[MB_N_IR_3x];
-    int  MBR[MB_N_HR_4x];
-    bool Active;
-    bool JustReceivedOne;
-    unsigned long PreviousActivityTime;
-    int Runs, Reads, Writes, TotalMessageLength, MessageStart, NoOfBytesToSend;
-
-    uint8_t ByteReceiveArray[160];
-    uint8_t ByteSendArray[160];
-    uint8_t SaveArray[160];
-    void MFSetFC(int fc);
-    void MBPopulateSendBuffer(uint8_t *SendBuffer, int NoOfBytes);
+    void MFSetFC(WORD fc);
+    void MBPopulateSendBuffer(BYTE *SendBuffer, WORD NoOfBytes);
     void MBbuffer_restore();
     void MBbuffer_save();
-    int word(uint8_t a, uint8_t b);
+    int word(BYTE a, BYTE b);
 
 
 
