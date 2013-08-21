@@ -189,7 +189,7 @@ void MBRun()
 
                 for(j = 0; j < 8; j++)
                 {
-                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, MBC[Start + i * 8 + j]);
+                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, mb0x[Start + i * 8 + j]);
                 }
             }
             MessageLength = ByteDataLength + 9;
@@ -219,7 +219,7 @@ void MBRun()
             {
                 for(j = 0; j < 8; j++)
                 {
-                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, MBI[Start + i * 8 + j]);
+                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, mb1x[Start + i * 8 + j]);
                 }
             }
             MessageLength = ByteDataLength + 9;
@@ -245,8 +245,8 @@ void MBRun()
             WORD i;
             for(i = 0; i < WordDataLength; i++)
             {
-                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(MBR[Start + i]);
-                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(MBR[Start + i]);
+                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(mb4x[Start + i]);
+                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(mb4x[Start + i]);
             }
             MessageLength = ByteDataLength + 9;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -271,8 +271,8 @@ void MBRun()
             WORD i;
             for(i = 0; i < WordDataLength; i++)
             {
-                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(MBIR[Start + i]);
-                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(MBIR[Start + i]);
+                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(mb3x[Start + i]);
+                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(mb3x[Start + i]);
             }
             MessageLength = ByteDataLength + 9;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -285,11 +285,11 @@ void MBRun()
         else if(FC == MB_FC_WRITE_COIL_0x)
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            MBC[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]) > 0;
+            mb0x[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]) > 0;
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_COIL_0x C");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBC[Start]);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, mb0x[Start]);
             ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -301,11 +301,11 @@ void MBRun()
         else if(FC == MB_FC_WRITE_REGISTER_4x)
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            MBR[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            mb4x[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_REGISTER_4x R");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBR[Start]);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, mb4x[Start]);
             ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -332,7 +332,7 @@ void MBRun()
             {
                 for(j = 0; j < 8; j++)
                 {
-                    MBC[Start + i * 8 + j] = bitRead( ByteReceiveArray[13 + i + MessageStart], j);
+                    mb0x[Start + i * 8 + j] = bitRead( ByteReceiveArray[13 + i + MessageStart], j);
                 }
             }
             MessageLength = 12;
@@ -357,7 +357,7 @@ void MBRun()
             WORD i;
             for(i = 0; i < WordDataLength; i++)
             {
-                MBR[Start + i] =  bytesToWord(ByteReceiveArray[ 13 + i * 2 + MessageStart],ByteReceiveArray[14 + i * 2 + MessageStart]);
+                mb4x[Start + i] =  bytesToWord(ByteReceiveArray[ 13 + i * 2 + MessageStart],ByteReceiveArray[14 + i * 2 + MessageStart]);
             }
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -485,3 +485,4 @@ void MBSetFC(WORD fc)
 
     }
 }
+
