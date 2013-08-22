@@ -67,10 +67,10 @@ enum MB_FC {
      These should be able to be read and written to
      from main.c
      */
-    extern BOOL mb0x[MB_N_C_0x];
-    extern BOOL mb1x[MB_N_I_1x];
-    extern WORD mb3x[MB_N_IR_3x];
-    extern WORD mb4x[MB_N_HR_4x];
+    BOOL mb0x[MB_N_C_0x];
+    BOOL mb1x[MB_N_I_1x];
+    WORD mb3x[MB_N_IR_3x];
+    WORD mb4x[MB_N_HR_4x];
 
     void MBRun();
     void MFSetFC(WORD fc);
@@ -78,6 +78,7 @@ enum MB_FC {
     void MBbuffer_restore();
     void MBbuffer_save();
     int word(BYTE a, BYTE b);
+    void mb_wr(BYTE data, int i);
 
 
 

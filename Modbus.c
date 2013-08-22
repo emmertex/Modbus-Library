@@ -32,7 +32,7 @@
 #if defined(DEBUG_LEVEL_ALLOFF)
     #define MY_DEBUG_LEVEL  0                   //Disable debugging if "DEBUG_LEVEL_ALLOFF" is defined
 #else
-    #define MY_DEBUG_LEVEL  DEBUG_LEVEL_INFO    //Set debug level. All debug messages with equal or higher priority will be outputted
+    #define MY_DEBUG_LEVEL  DEBUG_LEVEL_OFF    //Set debug level. All debug messages with equal or higher priority will be outputted
 #endif
 #include "nz_debug.h"                           //Required for debugging. This include MUST be after "#define MY_DEBUG_LEVEL ..."!
 
@@ -65,7 +65,9 @@ void MBRun()
 {
     WORD Start, WordDataLength, ByteDataLength, CoilDataLength, MessageLength, i, j;
     static TCP_SOCKET MySocket;
-    static BOOL oldConnectionState = FALSE;
+    #if (MY_DEBUG_LEVEL >= DEBUG_LEVEL_INFO)
+        static BOOL oldConnectionState = FALSE;
+    #endif
     WORD wMaxGet;
 	typedef enum
     {
@@ -77,6 +79,7 @@ void MBRun()
     static TCPServerState smMB = SM_HOME;
 
     Runs = 1 + Runs * (Runs < 999);
+    mb4x[1] = Runs;
 
 	switch(smMB)
     {
@@ -486,3 +489,7 @@ void MBSetFC(WORD fc)
     }
 }
 
+void mb_wr(BYTE data, int i)
+{
+    mb4x[i] = data;
+}
