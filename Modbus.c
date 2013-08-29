@@ -79,7 +79,6 @@ void MBRun()
     static TCPServerState smMB = SM_HOME;
 
     Runs = 1 + Runs * (Runs < 999);
-    mb4x[1] = Runs;
 
 	switch(smMB)
     {
@@ -489,7 +488,12 @@ void MBSetFC(WORD fc)
     }
 }
 
-void mb_wr(BYTE data, int i)
+void mb_w4x(WORD data, int i)
 {
     mb4x[i] = data;
+}
+
+WORD mb_r4x(int i)
+{
+    return mb4x[i];
 }

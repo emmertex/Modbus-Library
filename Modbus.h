@@ -78,7 +78,8 @@ enum MB_FC {
     void MBbuffer_restore();
     void MBbuffer_save();
     int word(BYTE a, BYTE b);
-    void mb_wr(BYTE data, int i);
+    void mb_w4x(WORD data, int i);
+    WORD mb_r4x(int i);
 
 
 
