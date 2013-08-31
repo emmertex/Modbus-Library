@@ -19,6 +19,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+#define THIS_IS_MODBUS_C
 
 #include "TCPIPConfig.h"
 #include "TCPIP Stack/TCPIP.h"
@@ -32,7 +33,7 @@
 #if defined(DEBUG_LEVEL_ALLOFF)
     #define MY_DEBUG_LEVEL  0                   //Disable debugging if "DEBUG_LEVEL_ALLOFF" is defined
 #else
-    #define MY_DEBUG_LEVEL  DEBUG_LEVEL_OFF    //Set debug level. All debug messages with equal or higher priority will be outputted
+    #define MY_DEBUG_LEVEL  DEBUG_LEVEL_INFO    //Set debug level. All debug messages with equal or higher priority will be outputted
 #endif
 #include "nz_debug.h"                           //Required for debugging. This include MUST be after "#define MY_DEBUG_LEVEL ..."!
 
@@ -46,6 +47,13 @@
 #define bytesToWord(hb,lb) ( (((WORD)(hb&0xff))<<8) | ((WORD)lb) )
 #define MbDebug
 #define MbRunsDebug
+
+// Global Variables  ///////////////////////////////////
+BOOL MBC[MB_N_C_0x];
+BOOL MBI[MB_N_I_1x];
+WORD MBIR[MB_N_IR_3x];
+WORD MBR[MB_N_HR_4x];
+
 
 // Variables  ///////////////////////////////////
 WORD FC;
@@ -65,9 +73,7 @@ void MBRun()
 {
     WORD Start, WordDataLength, ByteDataLength, CoilDataLength, MessageLength, i, j;
     static TCP_SOCKET MySocket;
-    #if (MY_DEBUG_LEVEL >= DEBUG_LEVEL_INFO)
-        static BOOL oldConnectionState = FALSE;
-    #endif
+    static BOOL oldConnectionState = FALSE;
     WORD wMaxGet;
 	typedef enum
     {
@@ -191,7 +197,7 @@ void MBRun()
 
                 for(j = 0; j < 8; j++)
                 {
-                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, mb0x[Start + i * 8 + j]);
+                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, MBC[Start + i * 8 + j]);
                 }
             }
             MessageLength = ByteDataLength + 9;
@@ -221,7 +227,7 @@ void MBRun()
             {
                 for(j = 0; j < 8; j++)
                 {
-                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, mb1x[Start + i * 8 + j]);
+                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, MBI[Start + i * 8 + j]);
                 }
             }
             MessageLength = ByteDataLength + 9;
@@ -247,8 +253,8 @@ void MBRun()
             WORD i;
             for(i = 0; i < WordDataLength; i++)
             {
-                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(mb4x[Start + i]);
-                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(mb4x[Start + i]);
+                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(MBR[Start + i]);
+                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(MBR[Start + i]);
             }
             MessageLength = ByteDataLength + 9;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -273,8 +279,8 @@ void MBRun()
             WORD i;
             for(i = 0; i < WordDataLength; i++)
             {
-                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(mb3x[Start + i]);
-                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(mb3x[Start + i]);
+                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(MBIR[Start + i]);
+                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(MBIR[Start + i]);
             }
             MessageLength = ByteDataLength + 9;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -287,11 +293,11 @@ void MBRun()
         else if(FC == MB_FC_WRITE_COIL_0x)
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            mb0x[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]) > 0;
+            MBC[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]) > 0;
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_COIL_0x C");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, mb0x[Start]);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBC[Start]);
             ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -303,11 +309,11 @@ void MBRun()
         else if(FC == MB_FC_WRITE_REGISTER_4x)
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            mb4x[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            MBR[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_REGISTER_4x R");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, mb4x[Start]);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBR[Start]);
             ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -334,7 +340,7 @@ void MBRun()
             {
                 for(j = 0; j < 8; j++)
                 {
-                    mb0x[Start + i * 8 + j] = bitRead( ByteReceiveArray[13 + i + MessageStart], j);
+                    MBC[Start + i * 8 + j] = bitRead( ByteReceiveArray[13 + i + MessageStart], j);
                 }
             }
             MessageLength = 12;
@@ -359,7 +365,7 @@ void MBRun()
             WORD i;
             for(i = 0; i < WordDataLength; i++)
             {
-                mb4x[Start + i] =  bytesToWord(ByteReceiveArray[ 13 + i * 2 + MessageStart],ByteReceiveArray[14 + i * 2 + MessageStart]);
+                MBR[Start + i] =  bytesToWord(ByteReceiveArray[ 13 + i * 2 + MessageStart],ByteReceiveArray[14 + i * 2 + MessageStart]);
             }
             MessageLength = 12;
             MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
@@ -486,14 +492,4 @@ void MBSetFC(WORD fc)
        DEBUG_PUT_STR(DEBUG_LEVEL_ERROR, "\n");
 
     }
-}
-
-void mb_w4x(WORD data, int i)
-{
-    mb4x[i] = data;
-}
-
-WORD mb_r4x(int i)
-{
-    return mb4x[i];
 }
