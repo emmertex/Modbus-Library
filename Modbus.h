@@ -80,6 +80,7 @@ void MBbuffer_restore();
 void MBbuffer_save();
 int word(BYTE a, BYTE b);
 void MB_wFloat(float f, int i);
+float MB_rFloat(int i);
 
 
 

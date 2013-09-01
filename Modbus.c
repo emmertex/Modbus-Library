@@ -515,11 +515,11 @@ void MB_wFloat(float f, int i){
 float MB_rFloat(int i){
     DWORD x;
     #ifdef LittleEndian
-        x = wordtoDWord(MBR[i],MBR[i+1]);
+        x = wordtoDWord(MBR[i+1],MBR[i]);
     #endif
 
     #ifndef LittleEndian
-        x = wordtoDWord(MBR[i+1],MBR[i]);
+        x = wordtoDWord(MBR[i],MBR[i+1]);
     #endif
     return *(float*)&x;
 }
