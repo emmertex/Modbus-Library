@@ -43,10 +43,10 @@ DON'T DO THAT!!!
 
 */
 
-#define MB_N_C_0x 8
+#define MB_N_C_0x 150
 #define MB_N_I_1x 8
-#define MB_N_IR_3x 64
-#define MB_N_HR_4x 64
+#define MB_N_IR_3x 8
+#define MB_N_HR_4x 100
 #define MB_PORT 502
 
 
@@ -79,6 +79,7 @@ void MBPopulateSendBuffer(BYTE *SendBuffer, WORD NoOfBytes);
 void MBbuffer_restore();
 void MBbuffer_save();
 int word(BYTE a, BYTE b);
+void MB_wFloat(float f, int i);
 
 
 

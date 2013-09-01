@@ -33,20 +33,24 @@
 #if defined(DEBUG_LEVEL_ALLOFF)
     #define MY_DEBUG_LEVEL  0                   //Disable debugging if "DEBUG_LEVEL_ALLOFF" is defined
 #else
-    #define MY_DEBUG_LEVEL  DEBUG_LEVEL_INFO    //Set debug level. All debug messages with equal or higher priority will be outputted
+    #define MY_DEBUG_LEVEL  0    //Set debug level. All debug messages with equal or higher priority will be outputted
 #endif
 #include "nz_debug.h"                           //Required for debugging. This include MUST be after "#define MY_DEBUG_LEVEL ..."!
 
 // Defines  /////////////////////////////////////
 #define lowByte(x)     ((unsigned char)((x)&0xFF))
 #define highByte(x)    ((unsigned char)(((x)>>8)&0xFF))
+#define lowWord(x)  ((float)((x)&0xFFFF))
+#define highWord(x) (((float)(((x)>>16)&0xFFFF)))
+#define wordtoDWord(hw,lw) ((((DWORD)(hw&0xFFFF))<<16) | ((DWORD)lw))
 #define bitRead(value,bit) (((value) >> (bit)) & 0x01)
 #define bitSet(value,bit) ((value) |= (1ul << (bit)))
 #define bitClear(value,bit) ((value) &= ~(1ul <<(bit)))
 #define bitWrite(value, bit, bitvalue) (bitvalue ? bitSet(value,bit) : bitClear(value,bit))
 #define bytesToWord(hb,lb) ( (((WORD)(hb&0xff))<<8) | ((WORD)lb) )
-#define MbDebug
-#define MbRunsDebug
+//#define MbDebug
+//#define MbRunsDebug
+#define LittleEndian
 
 // Global Variables  ///////////////////////////////////
 BOOL MBC[MB_N_C_0x];
@@ -73,7 +77,7 @@ void MBRun()
 {
     WORD Start, WordDataLength, ByteDataLength, CoilDataLength, MessageLength, i, j;
     static TCP_SOCKET MySocket;
-    static BOOL oldConnectionState = FALSE;
+//    static BOOL oldConnectionState = FALSE;
     WORD wMaxGet;
 	typedef enum
     {
@@ -119,7 +123,7 @@ void MBRun()
 
             if ( (wMaxGet=TCPIsGetReady(MySocket) > 0) ) {
                 Reads = 1 + Reads * (Reads < 999);
-                WORD i = 0;
+                
 
                 // Transfer the data out of the TCP RX FIFO and into our local processing buffer.
             	TotalMessageLength = TCPGetArray(MySocket, ByteReceiveArray, sizeof(ByteReceiveArray));
@@ -127,6 +131,7 @@ void MBRun()
                 MessageStart = 0;
         #ifdef MbDebug
                 DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nReceived: ");
+                WORD i = 0;
                 for (i=0; i<TotalMessageLength; i++) {
                     DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteReceiveArray[i]);
                     DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
@@ -492,4 +497,29 @@ void MBSetFC(WORD fc)
        DEBUG_PUT_STR(DEBUG_LEVEL_ERROR, "\n");
 
     }
+}
+
+void MB_wFloat(float f, int i){
+    DWORD x = *(DWORD*)&f;
+    #ifdef LittleEndian
+        MBR[i] = lowWord(x);
+        MBR[i+1] = highWord(x);
+    #endif
+
+    #ifndef LittleEndian
+        MBR[i+1] = lowWord(x);
+        MBR[i] = highWord(x);
+    #endif
+}
+
+float MB_rFloat(int i){
+    DWORD x;
+    #ifdef LittleEndian
+        x = wordtoDWord(MBR[i],MBR[i+1]);
+    #endif
+
+    #ifndef LittleEndian
+        x = wordtoDWord(MBR[i+1],MBR[i]);
+    #endif
+    return *(float*)&x;
 }
