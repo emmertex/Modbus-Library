@@ -38,19 +38,20 @@
 #include "nz_debug.h"                           //Required for debugging. This include MUST be after "#define MY_DEBUG_LEVEL ..."!
 
 // Defines  /////////////////////////////////////
-#define lowByte(x)     ((unsigned char)((x)&0xFF))
-#define highByte(x)    ((unsigned char)(((x)>>8)&0xFF))
-#define lowWord(x)  ((float)((x)&0xFFFF))
-#define highWord(x) (((float)(((x)>>16)&0xFFFF)))
-#define wordtoDWord(hw,lw) ((((DWORD)(hw&0xFFFF))<<16) | ((DWORD)lw))
+#define lowByte(x)     ((BYTE)((x)&0xFF))
+#define highByte(x)    ((BYTE)(((x)>>8)&0xFF))
+#define lowWord(x)  ((DWORD)((x)&0xFFFF))
+#define highWord(x) (((DWORD)(((x)>>16)&0xFFFF)))
+#define wordstoDWord(hw,lw) ((((DWORD)(hw&0xFFFF))<<16) | ((DWORD)lw))
 #define bitRead(value,bit) (((value) >> (bit)) & 0x01)
 #define bitSet(value,bit) ((value) |= (1ul << (bit)))
 #define bitClear(value,bit) ((value) &= ~(1ul <<(bit)))
 #define bitWrite(value, bit, bitvalue) (bitvalue ? bitSet(value,bit) : bitClear(value,bit))
-#define bytesToWord(hb,lb) ( (((WORD)(hb&0xff))<<8) | ((WORD)lb) )
+#define bytesToWord(hb,lb) ( (((WORD)(hb&0xFF))<<8) | ((WORD)lb) )
 //#define MbDebug
 //#define MbRunsDebug
-#define LittleEndian
+#define Float_CD_AB
+//#define Float_AB_CD
 
 // Global Variables  ///////////////////////////////////
 BOOL MBC[MB_N_C_0x];
@@ -500,13 +501,13 @@ void MBSetFC(WORD fc)
 }
 
 void MB_wFloat(float f, int i){
-    DWORD x = *(DWORD*)&f;
-    #ifdef LittleEndian
-        MBR[i] = lowWord(x);
+    DWORD x = *(DWORD*)&f;   //Place Float (as data, not value) into DWORD var.
+    #ifdef Float_CD_AB
+        MBR[i] = lowWord(x);      //Split DWORD into WORD
         MBR[i+1] = highWord(x);
     #endif
 
-    #ifndef LittleEndian
+    #ifdef Float_AB_CD
         MBR[i+1] = lowWord(x);
         MBR[i] = highWord(x);
     #endif
@@ -514,12 +515,12 @@ void MB_wFloat(float f, int i){
 
 float MB_rFloat(int i){
     DWORD x;
-    #ifdef LittleEndian
-        x = wordtoDWord(MBR[i+1],MBR[i]);
+    #ifdef Float_CD_AB
+        x = wordstoDWord(MBR[i+1],MBR[i]);   //Join 2 WORDs into one DWORD
     #endif
 
-    #ifndef LittleEndian
-        x = wordtoDWord(MBR[i],MBR[i+1]);
+    #ifdef Float_AB_CD
+        x = wordstoDWord(MBR[i],MBR[i+1]);
     #endif
-    return *(float*)&x;
+    return *(float*)&x;     //Place DWORD (as data, not value) into float var.
 }
