@@ -44,7 +44,8 @@ enum MB_FC {
     MB_FC_WRITE_COIL_0x               = 5,
     MB_FC_WRITE_REGISTER_4x           = 6,
     MB_FC_WRITE_MULTIPLE_COILS_0x     = 15,
-    MB_FC_WRITE_MULTIPLE_REGISTERS_4x = 16
+    MB_FC_WRITE_MULTIPLE_REGISTERS_4x = 16,
+    MB_FC_EXCEPTION                   = 128
 };
 
 
