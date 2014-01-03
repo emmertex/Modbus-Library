@@ -23,30 +23,15 @@
 */
 
 //#define MbDebug
-
-    // Removed - Arduino Libraries
-//#include "Arduino.h"
 #include <stdbool.h>
 #include <stdint.h>
 #ifndef Modbus_h
 #define Modbus_h
 
-/*
-Below are the limits of the number of accessible registers, coils and inputs.
-
-Observe that there are no checking if you try to access anything outside the limits.
-If you for example try to read the holding register on address 65 you will simply get
-the value of a memory location used for something else.
-
-If you try to write to anything outside the limits, disaster will strike...
-DON'T DO THAT!!!
-
-*/
-
-#define MB_N_C_0x 150
-#define MB_N_I_1x 8
-#define MB_N_IR_3x 8
-#define MB_N_HR_4x 100
+#define MB_C 64 //Holding Coils (commonly 0x)
+#define MB_I 16 //Input Coils (commonly 1x)
+#define MB_IR 32 //Input Registers (commonly 3x)
+#define MB_HR 64 //Holding Registers (commonly 4x)
 #define MB_PORT 502
 
 
@@ -65,10 +50,10 @@ enum MB_FC {
 
 // Global Variables  ///////////////////////////////////
 #if !defined(THIS_IS_MODBUS_C)
-extern BOOL MBC[MB_N_C_0x];
-extern BOOL MBI[MB_N_I_1x];
-extern WORD MBIR[MB_N_IR_3x];
-extern WORD MBR[MB_N_HR_4x];
+extern BOOL MBC[MB_C];
+extern BOOL MBI[MB_I];
+extern WORD MBIR[MB_IR];
+extern WORD MBR[MB_HR];
 #endif
 
 
@@ -100,7 +85,7 @@ float MB_rFloat(int i);
 10 Length high          maybe 125 or Data high if write
 11 Length low           maybe 125 or Data low if write
 **********************************************
-**********Slave(Arduino) response frames******
+**********Slave response frames******
 00 ID high              echo  /           0
 01 ID low               echo  /  slave ID 1
 02 Protocol high        echo

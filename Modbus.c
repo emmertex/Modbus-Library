@@ -29,11 +29,10 @@
 
 //Add debugging to this file. To disable all debugging:
 // - Change "#else" part below to: "#define MY_DEBUG_LEVEL  DEBUG_LEVEL_OFF"
-// - Include following line in "Debug Configuration" section of projdefs.h file: "#define DEBUG_LEVEL_ALLOFF"
 #if defined(DEBUG_LEVEL_ALLOFF)
     #define MY_DEBUG_LEVEL  0                   //Disable debugging if "DEBUG_LEVEL_ALLOFF" is defined
 #else
-    #define MY_DEBUG_LEVEL  0    //Set debug level. All debug messages with equal or higher priority will be outputted
+    #define MY_DEBUG_LEVEL  DEBUG_LEVEL_INFO    //Set debug level. All debug messages with equal or higher priority will be outputted
 #endif
 #include "nz_debug.h"                           //Required for debugging. This include MUST be after "#define MY_DEBUG_LEVEL ..."!
 
@@ -48,16 +47,14 @@
 #define bitClear(value,bit) ((value) &= ~(1ul <<(bit)))
 #define bitWrite(value, bit, bitvalue) (bitvalue ? bitSet(value,bit) : bitClear(value,bit))
 #define bytesToWord(hb,lb) ( (((WORD)(hb&0xFF))<<8) | ((WORD)lb) )
-//#define MbDebug
-//#define MbRunsDebug
 #define Float_CD_AB
 //#define Float_AB_CD
 
 // Global Variables  ///////////////////////////////////
-BOOL MBC[MB_N_C_0x];
-BOOL MBI[MB_N_I_1x];
-WORD MBIR[MB_N_IR_3x];
-WORD MBR[MB_N_HR_4x];
+BOOL MBC[MB_C];
+BOOL MBI[MB_I];
+WORD MBIR[MB_IR];
+WORD MBR[MB_HR];
 
 
 // Variables  ///////////////////////////////////
@@ -78,13 +75,14 @@ void MBRun()
 {
     WORD Start, WordDataLength, ByteDataLength, CoilDataLength, MessageLength, i, j;
     static TCP_SOCKET MySocket;
-//    static BOOL oldConnectionState = FALSE;
+    #if (MY_DEBUG_LEVEL >= DEBUG_LEVEL_INFO)
+        static BOOL oldConnectionState = FALSE;
+    #endif
     WORD wMaxGet;
 	typedef enum
     {
     	SM_HOME = 0,
     	SM_LISTENING,
-//        SM_RESPONDING,
         SM_CLOSING,
     } TCPServerState;
     static TCPServerState smMB = SM_HOME;
@@ -188,6 +186,14 @@ void MBRun()
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
             CoilDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            if((Start+CoilDataLength > MB_C)) {
+                FC = 0;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_COILS_0x Invalid Request   End of Request=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+CoilDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_C);
+                break;
+            }
             ByteDataLength = CoilDataLength / 8;
             if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
             CoilDataLength = ByteDataLength * 8;
@@ -218,6 +224,14 @@ void MBRun()
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
             CoilDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            if((Start+CoilDataLength > MB_I)) {
+                FC = 0;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_INPUTS_1x Invalid Request   End of Request=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+CoilDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_I);
+                break;
+            }
             ByteDataLength = CoilDataLength / 8;
             if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
             CoilDataLength = ByteDataLength * 8;
@@ -248,6 +262,14 @@ void MBRun()
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
             WordDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            if((Start+WordDataLength > MB_HR)) {
+                FC = 0;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_REGISTERS_4x Invalid Request   End of Request=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+WordDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_HR);
+                break;
+            }
             ByteDataLength = WordDataLength * 2;
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_REGISTERS_4x S=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
@@ -274,6 +296,14 @@ void MBRun()
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
             WordDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            if((Start+WordDataLength > MB_IR)) {
+                FC = 0;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_INPUT_REGISTERS_3x Invalid Request   End of Request=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+WordDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_IR);
+                break;
+            }
             ByteDataLength = WordDataLength * 2;
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_INPUT_REGISTERS_3x S=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
@@ -299,6 +329,14 @@ void MBRun()
         else if(FC == MB_FC_WRITE_COIL_0x)
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            if((Start > MB_C)) {
+                FC = 0;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_COIL_0x Invalid Request   End of Request=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Alocated Address=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_C);
+                break;
+            }
             MBC[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]) > 0;
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_COIL_0x C");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
@@ -315,6 +353,14 @@ void MBRun()
         else if(FC == MB_FC_WRITE_REGISTER_4x)
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
+            if((Start > MB_HR)) {
+                FC = 0;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_REGISTER_4x Invalid Request   End of Request=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_HR);
+                break;
+            }
             MBR[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_REGISTER_4x R");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
@@ -332,6 +378,14 @@ void MBRun()
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
             CoilDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            if((Start+CoilDataLength > MB_C)) {
+                FC = 0;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_MULTIPLE_COILS_0x Invalid Request   End of Request=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+CoilDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_C);
+                break;
+            }
             ByteDataLength = CoilDataLength / 8;
             if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
             CoilDataLength = ByteDataLength * 8;
@@ -361,6 +415,14 @@ void MBRun()
         {
             Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
             WordDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
+            if((Start+WordDataLength > MB_HR)) {
+                FC = 0;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_MULTIPLE_REGISTERS_4x Invalid Request   End of Request=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+WordDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_HR);
+                break;
+            }
             ByteDataLength = WordDataLength * 2;
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_MULTIPLE_REGISTERS_4x S=");
             DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
