@@ -22,39 +22,25 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-//#define MbDebug
+//#define MbDebug   //extra debugging, see Modbus.c
 #include <stdbool.h>
 #include <stdint.h>
 #ifndef Modbus_h
 #define Modbus_h
 
-#define MB_C 64 //Holding Coils (commonly 0x)
-#define MB_I 16 //Input Coils (commonly 1x)
-#define MB_IR 32 //Input Registers (commonly 3x)
-#define MB_HR 64 //Holding Registers (commonly 4x)
-#define MB_PORT 502
-
-
-enum MB_FC {
-    MB_FC_NONE                        = 0,
-    MB_FC_READ_COILS_0x               = 1,
-    MB_FC_READ_INPUTS_1x              = 2,
-    MB_FC_READ_REGISTERS_4x           = 3,
-    MB_FC_READ_INPUT_REGISTERS_3x     = 4,
-    MB_FC_WRITE_COIL_0x               = 5,
-    MB_FC_WRITE_REGISTER_4x           = 6,
-    MB_FC_WRITE_MULTIPLE_COILS_0x     = 15,
-    MB_FC_WRITE_MULTIPLE_REGISTERS_4x = 16,
-    MB_FC_EXCEPTION                   = 128
-};
+#define MB_C 64         //Holding Coils (commonly 0x)
+#define MB_I 16         //Input Coils (commonly 1x)
+#define MB_IR 32        //Input Registers (commonly 3x)
+#define MB_HR 64        //Holding Registers (commonly 4x)
+#define MB_PORT 502     //Modbus Port (default is 502)
 
 
 // Global Variables  ///////////////////////////////////
 #if !defined(THIS_IS_MODBUS_C)
-extern BOOL MBC[MB_C];
-extern BOOL MBI[MB_I];
-extern WORD MBIR[MB_IR];
-extern WORD MBR[MB_HR];
+    extern BOOL MBC[MB_C];
+    extern BOOL MBI[MB_I];
+    extern WORD MBIR[MB_IR];
+    extern WORD MBR[MB_HR];
 #endif
 
 
@@ -94,12 +80,23 @@ float MB_rFloat(int i);
 04 Message length high  echo
 05 Message length low   num bytes after this
 06 Slave number         echo
-07 Function code        echo
-08 Start address high   num bytes of data
+07 Function code        echo for OK, 80h+FC for Exception
+08 Start address high   num bytes of data for OK, else Exception Code
 09 Data high
 10 Data low
 **********************************************
 */
+
+/* Exception Codes
+**********************************************
+01 Illegal Function         Implemented
+02 Illegal Data Address     Implemented
+03 Illegal Data Value       Not Needed? Application Specific?
+04 Failure in Device        Not Needed. Application Specific.
+All others are program or special function related
+**********************************************
+*/
+
 
 
 #endif	/* MODBUS_H */

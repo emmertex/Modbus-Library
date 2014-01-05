@@ -27,8 +27,6 @@
 #include "Modbus.h"
 #include "nz_tick.h"
 
-//Add debugging to this file. To disable all debugging:
-// - Change "#else" part below to: "#define MY_DEBUG_LEVEL  DEBUG_LEVEL_OFF"
 #if defined(DEBUG_LEVEL_ALLOFF)
     #define MY_DEBUG_LEVEL  0                   //Disable debugging if "DEBUG_LEVEL_ALLOFF" is defined
 #else
@@ -47,8 +45,7 @@
 #define bitClear(value,bit) ((value) &= ~(1ul <<(bit)))
 #define bitWrite(value, bit, bitvalue) (bitvalue ? bitSet(value,bit) : bitClear(value,bit))
 #define bytesToWord(hb,lb) ( (((WORD)(hb&0xFF))<<8) | ((WORD)lb) )
-#define Float_CD_AB
-//#define Float_AB_CD
+#define Float_CD_AB    //else it is Float_CD_AB
 
 // Global Variables  ///////////////////////////////////
 BOOL MBC[MB_C];
@@ -58,15 +55,15 @@ WORD MBR[MB_HR];
 
 
 // Variables  ///////////////////////////////////
-WORD FC;
-BOOL Active = FALSE;
-BOOL JustReceivedOne;
-WORD Runs, Reads, Writes, TotalMessageLength, MessageStart, NoOfBytesToSend;
-BYTE ByteReceiveArray[160];
-BYTE ByteSendArray[160];
-BYTE SaveArray[160];
-WORD PreviousActivityTime = 0;
-BYTE Exception;
+BYTE FC;
+BOOL active = FALSE;
+BOOL justReceivedOne;
+WORD runs, reads, writes, totalmessageLength, messagestart, noOfBytesToSend;
+BYTE byteReceiveArray[160];
+BYTE byteSendArray[160];
+BYTE saveArray[160];
+WORD previousActivityTime = 0;
+BYTE exception;
 
 
 // Function Prototypes  /////////////////////////
@@ -74,8 +71,8 @@ void MBSetFC(WORD fc);
 
 void MBRun()
 {
-    WORD Start, WordDataLength, ByteDataLength, CoilDataLength, MessageLength, i, j;
-    static TCP_SOCKET MySocket;
+    WORD start, wordDataLength, byteDataLength, coilDataLength, messageLength, i, j;
+    static TCP_SOCKET mySocket;
     #if (MY_DEBUG_LEVEL >= DEBUG_LEVEL_INFO)
         static BOOL oldConnectionState = FALSE;
     #endif
@@ -88,14 +85,13 @@ void MBRun()
     } TCPServerState;
     static TCPServerState smMB = SM_HOME;
 
-    Runs = 1 + Runs * (Runs < 999);
+    runs = 1 + runs * (runs < 999);
 
 	switch(smMB)
     {
-    	case SM_HOME:
-            // Allocate a socket for this server to listen and accept connections on
-        	MySocket = TCPOpen(0, TCP_OPEN_SERVER, MB_PORT, TCP_PURPOSE_DEFAULT);
-        	if(MySocket == INVALID_SOCKET)
+    	case SM_HOME:   // Allocate a socket for this server to listen and accept connections on
+        	mySocket = TCPOpen(0, TCP_OPEN_SERVER, MB_PORT, TCP_PURPOSE_DEFAULT);
+        	if(mySocket == INVALID_SOCKET)
             	return;
 
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB Opened Socket");
@@ -104,7 +100,7 @@ void MBRun()
 
     	case SM_LISTENING:
             // See if anyone is connected to us
-        	if(!TCPIsConnected(MySocket)) {
+        	if(!TCPIsConnected(mySocket)) {
                 #if (MY_DEBUG_LEVEL >= DEBUG_LEVEL_INFO)
                 if (oldConnectionState == TRUE) {
                     oldConnectionState = FALSE;
@@ -121,471 +117,417 @@ void MBRun()
             }
             #endif
 
-            if ( (wMaxGet=TCPIsGetReady(MySocket) > 0) ) {
-                Reads = 1 + Reads * (Reads < 999);
+            if ( (wMaxGet=TCPIsGetReady(mySocket) > 0) ) {
+                reads = 1 + reads * (reads < 999);
                 
 
                 // Transfer the data out of the TCP RX FIFO and into our local processing buffer.
-            	TotalMessageLength = TCPGetArray(MySocket, ByteReceiveArray, sizeof(ByteReceiveArray));
-                NoOfBytesToSend = 0;
-                MessageStart = 0;
+            	totalmessageLength = TCPGetArray(mySocket, byteReceiveArray, sizeof(byteReceiveArray));
+                noOfBytesToSend = 0;
+                messagestart = 0;
         #ifdef MbDebug
                 DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nReceived: ");
                 WORD i = 0;
-                for (i=0; i<TotalMessageLength; i++) {
-                    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteReceiveArray[i]);
+                for (i=0; i<totalmessageLength; i++) {
+                    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, byteReceiveArray[i]);
                     DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
                 }
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMessageLength = ");
-                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, TotalMessageLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nmessageLength = ");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, totalmessageLength);
         #endif
-                MBSetFC(ByteReceiveArray[7]);  //Byte 7 of request is FC
-                JustReceivedOne = TRUE;
-                if(!Active)
+                MBSetFC(byteReceiveArray[7]);  //Byte 7 of request is FC
+                justReceivedOne = TRUE;
+                if(!active)
                 {
-                    Active = TRUE;
-                    PreviousActivityTime = getTick16bit_1ms();   //Get 16-bit, 1ms tick
+                    active = TRUE;
+                    previousActivityTime = getTick16bit_1ms();   //Get 16-bit, 1ms tick
                     DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb active\n");
                 }
             }
 
-            // No need to perform any flush.  TCP data in TX FIFO will automatically transmit itself after
-            //it accumulates for a while.  If you want to decrease latency (at the expense of wasting network
-            //bandwidth on TCP overhead), perform and explicit flush via the TCPFlush() API.
-            //TCPFlush();
-
         	break;
 
-//        case SM_RESPONDING:
-//            smMB = SM_LISTENING;
-//            break;
-
-    	case SM_CLOSING:
-            // Close the socket connection.
-            TCPClose(MySocket);
+    	case SM_CLOSING:        // Close the socket connection.
+            TCPClose(mySocket);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB Closed Socket");
         	smMB = SM_HOME;
         	break;
     }
 
-    if (Active == FALSE) {
+    if (active == FALSE) {
         return;
     }
 
-    if(getTick16bit_1ms() > (PreviousActivityTime + 60000))
+    if(getTick16bit_1ms() > (previousActivityTime + 60000))
     {
-        if(Active)
+        if(active)
         {
-            Active = FALSE;
+            active = FALSE;
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "Mb not active\n");
         }
     }
 
     while (FC != 0) {
         //**1**************** Read Coils **********************
-        if(FC == MB_FC_READ_COILS_0x)
+        if(FC == 1)
         {
-            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            CoilDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
-            if((Start+CoilDataLength > MB_C)) {
+            start = bytesToWord(byteReceiveArray[8 + messagestart],byteReceiveArray[9 + messagestart]);
+            coilDataLength = bytesToWord(byteReceiveArray[10 + messagestart],byteReceiveArray[11 + messagestart]);
+            if((start+coilDataLength > MB_C)) {
                 FC += 128;
-                Exception = 2;
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_COILS_0x Invalid Request   End of Request=");
-                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+CoilDataLength);
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                exception = 2;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:1 - Read Coils - Error  EOR=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start+coilDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   L=");
                 DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_C);
                 break;
             }
-            ByteDataLength = CoilDataLength / 8;
-            if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
-            CoilDataLength = ByteDataLength * 8;
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_COILS_0x S=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            byteDataLength = coilDataLength / 8;
+            if(byteDataLength * 8 < coilDataLength) byteDataLength++;
+            coilDataLength = byteDataLength * 8;
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:1 - Read Coils S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, CoilDataLength);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, coilDataLength);
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
-            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
-            for(i = 0; i < ByteDataLength ; i++)
+            byteReceiveArray[5 + messagestart] = byteDataLength + 3; //number of bytes after this one.
+            byteReceiveArray[8 + messagestart] = byteDataLength;     //number of bytes after this one (or number of bytes of data).
+            for(i = 0; i < byteDataLength ; i++)
             {
 
                 for(j = 0; j < 8; j++)
                 {
-                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, MBC[Start + i * 8 + j]);
+                    bitWrite(byteReceiveArray[9 + i + messagestart], j, MBC[start + i * 8 + j]);
                 }
             }
-            MessageLength = ByteDataLength + 9;
-            MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
-            Writes = 1 + Writes * (Writes < 999);
-            FC = MB_FC_NONE;
+            messageLength = byteDataLength + 9;
+            MBPopulateSendBuffer(&byteReceiveArray[messagestart], messageLength);
+            writes = 1 + writes * (writes < 999);
+            FC = 0;
             MBbuffer_restore();
         }
 
         //**2**************** Read descrete Inputs **********************
-        else if(FC == MB_FC_READ_INPUTS_1x)
+        else if(FC == 2)
         {
-            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            CoilDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
-            if((Start+CoilDataLength > MB_I)) {
+            start = bytesToWord(byteReceiveArray[8 + messagestart],byteReceiveArray[9 + messagestart]);
+            coilDataLength = bytesToWord(byteReceiveArray[10 + messagestart],byteReceiveArray[11 + messagestart]);
+            if((start+coilDataLength > MB_I)) {
                 FC += 128;
-                Exception = 2;
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_INPUTS_1x Invalid Request   End of Request=");
-                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+CoilDataLength);
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                exception = 2;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:2 - Read Inputs EOR=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start+coilDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
                 DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_I);
                 break;
             }
-            ByteDataLength = CoilDataLength / 8;
-            if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
-            CoilDataLength = ByteDataLength * 8;
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_INPUTS_1x S=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            byteDataLength = coilDataLength / 8;
+            if(byteDataLength * 8 < coilDataLength) byteDataLength++;
+            coilDataLength = byteDataLength * 8;
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:2 - Read Inputs S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, CoilDataLength);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, coilDataLength);
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
-            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
+            byteReceiveArray[5 + messagestart] = byteDataLength + 3; //number of bytes after this one.
+            byteReceiveArray[8 + messagestart] = byteDataLength;     //number of bytes after this one (or number of bytes of data).
             WORD i,j;
-            for(i = 0; i < ByteDataLength ; i++)
+            for(i = 0; i < byteDataLength ; i++)
             {
                 for(j = 0; j < 8; j++)
                 {
-                    bitWrite(ByteReceiveArray[9 + i + MessageStart], j, MBI[Start + i * 8 + j]);
+                    bitWrite(byteReceiveArray[9 + i + messagestart], j, MBI[start + i * 8 + j]);
                 }
             }
-            MessageLength = ByteDataLength + 9;
-            MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
-            Writes = 1 + Writes * (Writes < 999);
-            FC = MB_FC_NONE;
+            messageLength = byteDataLength + 9;
+            MBPopulateSendBuffer(&byteReceiveArray[messagestart], messageLength);
+            writes = 1 + writes * (writes < 999);
+            FC = 0;
             MBbuffer_restore();
         }
 
         //**3**************** Read Holding Registers ******************
-        else if(FC == MB_FC_READ_REGISTERS_4x)
+        else if(FC == 3)
         {
-            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            WordDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
-            if((Start+WordDataLength > MB_HR)) {
+            start = bytesToWord(byteReceiveArray[8 + messagestart],byteReceiveArray[9 + messagestart]);
+            wordDataLength = bytesToWord(byteReceiveArray[10 + messagestart],byteReceiveArray[11 + messagestart]);
+            if((start+wordDataLength > MB_HR)) {
                 FC += 128;
-                Exception = 2;
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_REGISTERS_4x Invalid Request   End of Request=");
-                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+WordDataLength);
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                exception = 2;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:3 Read Holding Registers - EOR=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start+wordDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
                 DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_HR);
                 break;
             }
-            ByteDataLength = WordDataLength * 2;
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_REGISTERS_4x S=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            byteDataLength = wordDataLength * 2;
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:3 Read Holding Registers S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, WordDataLength);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, wordDataLength);
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
-            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
+            byteReceiveArray[5 + messagestart] = byteDataLength + 3; //number of bytes after this one.
+            byteReceiveArray[8 + messagestart] = byteDataLength;     //number of bytes after this one (or number of bytes of data).
             WORD i;
-            for(i = 0; i < WordDataLength; i++)
+            for(i = 0; i < wordDataLength; i++)
             {
-                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(MBR[Start + i]);
-                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(MBR[Start + i]);
+                byteReceiveArray[ 9 + i * 2 + messagestart] = highByte(MBR[start + i]);
+                byteReceiveArray[10 + i * 2 + messagestart] =  lowByte(MBR[start + i]);
             }
-            MessageLength = ByteDataLength + 9;
-            MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
-            Writes = 1 + Writes * (Writes < 999);
-            FC = MB_FC_NONE;
+            messageLength = byteDataLength + 9;
+            MBPopulateSendBuffer(&byteReceiveArray[messagestart], messageLength);
+            writes = 1 + writes * (writes < 999);
+            FC = 0;
             MBbuffer_restore();
         }
 
         //**4**************** Read Input Registers ******************
-        else if(FC == MB_FC_READ_INPUT_REGISTERS_3x)
+        else if(FC == 4)
         {
-            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            WordDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
-            if((Start+WordDataLength > MB_IR)) {
+            start = bytesToWord(byteReceiveArray[8 + messagestart],byteReceiveArray[9 + messagestart]);
+            wordDataLength = bytesToWord(byteReceiveArray[10 + messagestart],byteReceiveArray[11 + messagestart]);
+            if((start+wordDataLength > MB_IR)) {
                 FC += 128;
-                Exception = 2;
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_INPUT_REGISTERS_3x Invalid Request   End of Request=");
-                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+WordDataLength);
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                exception = 2;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:4 Read Input Registers EOR=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start+wordDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
                 DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_IR);
                 break;
             }
-            ByteDataLength = WordDataLength * 2;
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_READ_INPUT_REGISTERS_3x S=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            byteDataLength = wordDataLength * 2;
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:4 Read Input Registers S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, WordDataLength);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, wordDataLength);
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = ByteDataLength + 3; //number of bytes after this one.
-            ByteReceiveArray[8 + MessageStart] = ByteDataLength;     //number of bytes after this one (or number of bytes of data).
+            byteReceiveArray[5 + messagestart] = byteDataLength + 3; //number of bytes after this one.
+            byteReceiveArray[8 + messagestart] = byteDataLength;     //number of bytes after this one (or number of bytes of data).
             WORD i;
-            for(i = 0; i < WordDataLength; i++)
+            for(i = 0; i < wordDataLength; i++)
             {
-                ByteReceiveArray[ 9 + i * 2 + MessageStart] = highByte(MBIR[Start + i]);
-                ByteReceiveArray[10 + i * 2 + MessageStart] =  lowByte(MBIR[Start + i]);
+                byteReceiveArray[ 9 + i * 2 + messagestart] = highByte(MBIR[start + i]);
+                byteReceiveArray[10 + i * 2 + messagestart] =  lowByte(MBIR[start + i]);
             }
-            MessageLength = ByteDataLength + 9;
-            MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
-            Writes = 1 + Writes * (Writes < 999);
-            FC = MB_FC_NONE;
+            messageLength = byteDataLength + 9;
+            MBPopulateSendBuffer(&byteReceiveArray[messagestart], messageLength);
+            writes = 1 + writes * (writes < 999);
+            FC = 0;
             MBbuffer_restore();
         }
 
         //**5**************** Write Coil **********************
-        else if(FC == MB_FC_WRITE_COIL_0x)
+        else if(FC == 5)
         {
-            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            if((Start > MB_C)) {
+            start = bytesToWord(byteReceiveArray[8 + messagestart],byteReceiveArray[9 + messagestart]);
+            if((start > MB_C)) {
                 FC += 128;
-                Exception = 2;
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_COIL_0x Invalid Request   End of Request=");
-                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Alocated Address=");
+                exception = 2;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:5 Write Coil EOR=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
                 DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_C);
                 break;
             }
-            MBC[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]) > 0;
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_COIL_0x C");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            MBC[start] = bytesToWord(byteReceiveArray[10 + messagestart],byteReceiveArray[11 + messagestart]) > 0;
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:5 Write Coil C");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBC[Start]);
-            ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
-            MessageLength = 12;
-            MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
-            Writes = 1 + Writes * (Writes < 999);
-            FC = MB_FC_NONE;
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBC[start]);
+            byteReceiveArray[5 + messagestart] = 6; //number of bytes after this one.
+            messageLength = 12;
+            MBPopulateSendBuffer(&byteReceiveArray[messagestart], messageLength);
+            writes = 1 + writes * (writes < 999);
+            FC = 0;
         }
 
         //**6**************** Write Single Register ******************
-        else if(FC == MB_FC_WRITE_REGISTER_4x)
+        else if(FC == 6)
         {
-            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            if((Start > MB_HR)) {
+            start = bytesToWord(byteReceiveArray[8 + messagestart],byteReceiveArray[9 + messagestart]);
+            if((start > MB_HR)) {
                 FC += 128;
-                Exception = 2;
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_REGISTER_4x Invalid Request   End of Request=");
-                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                exception = 2;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:6 Write Single Registers EOR==");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
                 DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_HR);
                 break;
             }
-            MBR[Start] = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_REGISTER_4x R");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            MBR[start] = bytesToWord(byteReceiveArray[10 + messagestart],byteReceiveArray[11 + messagestart]);
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:6 Write Single Registers R");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBR[Start]);
-            ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
-            MessageLength = 12;
-            MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
-            Writes = 1 + Writes * (Writes < 999);
-            FC = MB_FC_NONE;
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MBR[start]);
+            byteReceiveArray[5 + messagestart] = 6; //number of bytes after this one.
+            messageLength = 12;
+            MBPopulateSendBuffer(&byteReceiveArray[messagestart], messageLength);
+            writes = 1 + writes * (writes < 999);
+            FC = 0;
         }
 
         //**15**************** Write Multiple Coils **********************
-        else if(FC == MB_FC_WRITE_MULTIPLE_COILS_0x)
+        else if(FC == 15)
         {
-            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            CoilDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
-            if((Start+CoilDataLength > MB_C)) {
+            start = bytesToWord(byteReceiveArray[8 + messagestart],byteReceiveArray[9 + messagestart]);
+            coilDataLength = bytesToWord(byteReceiveArray[10 + messagestart],byteReceiveArray[11 + messagestart]);
+            if((start+coilDataLength > MB_C)) {
                 FC += 128;
-                Exception = 2;
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_MULTIPLE_COILS_0x Invalid Request   End of Request=");
-                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+CoilDataLength);
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                exception = 2;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:15 Write Multiple Coils EOR=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start+coilDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
                 DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_C);
                 break;
             }
-            ByteDataLength = CoilDataLength / 8;
-            if(ByteDataLength * 8 < CoilDataLength) ByteDataLength++;
-            CoilDataLength = ByteDataLength * 8;
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_MULTIPLE_COILS_0x S=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            byteDataLength = coilDataLength / 8;
+            if(byteDataLength * 8 < coilDataLength) byteDataLength++;
+            coilDataLength = byteDataLength * 8;
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:15 Write Multiple Coils S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, CoilDataLength);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, coilDataLength);
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
+            byteReceiveArray[5 + messagestart] = 6; //number of bytes after this one.
             WORD i,j;
-            for(i = 0; i < ByteDataLength ; i++)
+            for(i = 0; i < byteDataLength ; i++)
             {
                 for(j = 0; j < 8; j++)
                 {
-                    MBC[Start + i * 8 + j] = bitRead( ByteReceiveArray[13 + i + MessageStart], j);
+                    MBC[start + i * 8 + j] = bitRead( byteReceiveArray[13 + i + messagestart], j);
                 }
             }
-            MessageLength = 12;
-            MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
-            Writes = 1 + Writes * (Writes < 999);
-            FC = MB_FC_NONE;
+            messageLength = 12;
+            MBPopulateSendBuffer(&byteReceiveArray[messagestart], messageLength);
+            writes = 1 + writes * (writes < 999);
+            FC = 0;
             MBbuffer_restore();
         }
 
         //**16**************** Write Multiple Registers ******************
-        else if(FC == MB_FC_WRITE_MULTIPLE_REGISTERS_4x)
+        else if(FC == 16)
         {
-            Start = bytesToWord(ByteReceiveArray[8 + MessageStart],ByteReceiveArray[9 + MessageStart]);
-            WordDataLength = bytesToWord(ByteReceiveArray[10 + MessageStart],ByteReceiveArray[11 + MessageStart]);
-            if((Start+WordDataLength > MB_HR)) {
+            start = bytesToWord(byteReceiveArray[8 + messagestart],byteReceiveArray[9 + messagestart]);
+            wordDataLength = bytesToWord(byteReceiveArray[10 + messagestart],byteReceiveArray[11 + messagestart]);
+            if((start+wordDataLength > MB_HR)) {
                 FC += 128;
-                Exception = 2;
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_MULTIPLE_REGISTERS_4x Invalid Request   End of Request=");
-                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start+WordDataLength);
-                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "   Last Allocated Address=");
+                exception = 2;
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:16 Write Multiple Registers EOR=");
+                DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start+wordDataLength);
+                DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
                 DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MB_HR);
                 break;
             }
-            ByteDataLength = WordDataLength * 2;
-            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMB_FC_WRITE_MULTIPLE_REGISTERS_4x S=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Start);
+            byteDataLength = wordDataLength * 2;
+            DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nFC:16 Write Multiple Registers S=");
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, start);
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " L=");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, WordDataLength);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, wordDataLength);
             MBbuffer_save();
-            ByteReceiveArray[5 + MessageStart] = 6; //number of bytes after this one.
+            byteReceiveArray[5 + messagestart] = 6; //number of bytes after this one.
             WORD i;
-            for(i = 0; i < WordDataLength; i++)
+            for(i = 0; i < wordDataLength; i++)
             {
-                MBR[Start + i] =  bytesToWord(ByteReceiveArray[ 13 + i * 2 + MessageStart],ByteReceiveArray[14 + i * 2 + MessageStart]);
+                MBR[start + i] =  bytesToWord(byteReceiveArray[ 13 + i * 2 + messagestart],byteReceiveArray[14 + i * 2 + messagestart]);
             }
-            MessageLength = 12;
-            MBPopulateSendBuffer(&ByteReceiveArray[MessageStart], MessageLength);
-            Writes = 1 + Writes * (Writes < 999);
-            FC = MB_FC_NONE;
+            messageLength = 12;
+            MBPopulateSendBuffer(&byteReceiveArray[messagestart], messageLength);
+            writes = 1 + writes * (writes < 999);
+            FC = 0;
             MBbuffer_restore();
         }
 
         if (FC > 128) {
-            //80h + FC = Exception
+            //80h + FC = exception
             MBbuffer_save();
-            ByteReceiveArray[7 + MessageStart] += 128; //Turn FC echo into Exception
-            ByteReceiveArray[5 + MessageStart] = 3; //Number of bytes after this one
-            ByteReceiveArray[8 + MessageStart] = Exception; //Exception Code
-            MBPopulateSendBuffer(&ByteReceiveArray[MessageStart],9);
-            FC = MB_FC_NONE;
+            byteReceiveArray[7 + messagestart] += 128;  //Turn FC echo into exception
+            byteReceiveArray[5 + messagestart] = 3;     //Number of bytes after this one
+            byteReceiveArray[8 + messagestart] = exception; //exception Code
+            MBPopulateSendBuffer(&byteReceiveArray[messagestart],9);
+            FC = 0;
             MBbuffer_restore();
         }
 
-        if (JustReceivedOne) {
-            MessageStart = MessageStart + 6 + ByteReceiveArray[5 + MessageStart];
+        if (justReceivedOne) {
+            messagestart = messagestart + 6 + byteReceiveArray[5 + messagestart];
             DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nNext start = ");
-            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, MessageStart);
-            if (MessageStart+5<TotalMessageLength)
-                MBSetFC(ByteReceiveArray[7 + MessageStart]);
+            DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, messagestart);
+            if (messagestart+5<totalmessageLength)
+                MBSetFC(byteReceiveArray[7 + messagestart]);
             else {
-                JustReceivedOne = false;
-                FC = MB_FC_NONE;
+                justReceivedOne = false;
+                FC = 0;
 #ifdef MbDebug
-                for (i=0; i<NoOfBytesToSend; i++) {
-                    //DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteSendArray[i],HEX);
-                    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, ByteSendArray[i]);
+                for (i=0; i<noOfBytesToSend; i++) {
+                    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, byteSendArray[i]);
                     DEBUG_PUT_STR(DEBUG_LEVEL_INFO, " ");
                 }
 #endif
-                TCPPutArray(MySocket, ByteSendArray, NoOfBytesToSend);
-                TCPFlush(MySocket);
-//                smMB = SM_RESPONDING;
+                TCPPutArray(mySocket, byteSendArray, noOfBytesToSend);
+                TCPFlush(mySocket);
                 DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nSent");
-                NoOfBytesToSend = 0;
-                MessageStart = 0;
+                noOfBytesToSend = 0;
+                messagestart = 0;
             }
-        }   // if (JustReceivedOne)
-    }   // while (FC != 0)
-
-//    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "\nMb runs: ");
-//    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Runs);
-//    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "  reads: ");
-//    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Reads);
-//    DEBUG_PUT_STR(DEBUG_LEVEL_INFO, "  writes: ");
-//    DEBUG_PUT_WORD(DEBUG_LEVEL_INFO, Writes);
+        }  
+    } 
 }
 
-void MBbuffer_save()
+void MBbuffer_save() 
 {
     WORD i;
-    i=0;
-    while(i<160)
-    {
-        SaveArray[i] = ByteReceiveArray[i];
-        i++;
+    for(i=0;i<160;i++){
+        saveArray[i] = byteReceiveArray[i];
     }
 }
-void MBbuffer_restore()
+void MBbuffer_restore() 
 {
     WORD i;
-    i=0;
-    while(i<160)
-    {
-        ByteReceiveArray[i] = SaveArray[i];
-        i++;
+    for(i=0;i<160;1++){
+        byteReceiveArray[i] = saveArray[i];
     }
 }
 
 
-void MBPopulateSendBuffer(BYTE *SendBuffer, WORD NoOfBytes)
+void MBPopulateSendBuffer(BYTE *SendBuffer, WORD NoOfBytes) 
 {
-    WORD i;
-    i=0;
-    while(i<NoOfBytes)
-    {
-        ByteSendArray[NoOfBytesToSend] = SendBuffer[i];
-        NoOfBytesToSend++;
-        i++;
-
+    WORD i
+    for(i=0;i<NoOfBytes;i++){
+        byteSendArray[noOfBytesToSend] = SendBuffer[i];
+        noOfBytesToSend++;
     }
 }
 void MBSetFC(WORD fc)
 {
-
-// Read coils (FC 1) 0x
-    if(fc == 1) FC = MB_FC_READ_COILS_0x;
-
-// Read input discretes (FC 2) 1x
-    else if(fc == 2) FC = MB_FC_READ_INPUTS_1x;
-
-// Read multiple registers (FC 3) 4x
-    else if(fc == 3) FC = MB_FC_READ_REGISTERS_4x;
-
-// Read input registers (FC 4) 3x
-    else if(fc == 4) FC = MB_FC_READ_INPUT_REGISTERS_3x;
-
-// Write coil (FC 5) 0x
-    else if(fc == 5) FC = MB_FC_WRITE_COIL_0x;
-
-// Write single register (FC 6) 4x
-    else if(fc == 6) FC = MB_FC_WRITE_REGISTER_4x;
-
-// Read exception status (FC 7) we skip this one
-
-// Force multiple coils (FC 15) 0x
-    else if(fc == 15) FC = MB_FC_WRITE_MULTIPLE_COILS_0x;
-
-// Write multiple registers (FC 16) 4x
-    else if(fc == 16) FC = MB_FC_WRITE_MULTIPLE_REGISTERS_4x;
-
-// Read general reference (FC 20)  we skip this one
-
-// Write general reference (FC 21)  we skip this one
-
-// Mask write register (FC 22)  we skip this one
-
-// Read/write registers (FC 23)  we skip this one
-
-// Read FIFO queue (FC 24)  we skip this one
-    else {;
-        Exception = 1;
+    if(fc == 1) FC = 1;         // Read coils (FC 1) 0x
+    else if(fc == 2) FC = 2;    // Read input discretes (FC 2) 1x
+    else if(fc == 3) FC = 3;    // Read multiple registers (FC 3) 4x
+    else if(fc == 4) FC = 4;    // Read input registers (FC 4) 3x
+    else if(fc == 5) FC = 5;    // Write coil (FC 5) 0x
+    else if(fc == 6) FC = 6;    // Write single register (FC 6) 4x
+    else if(fc == 15) FC = 15;  // Force multiple coils (FC 15) 0x
+    else if(fc == 16) FC = 16;  // Write multiple registers (FC 16) 4x
+                                // Read general reference (FC 20)
+                                // Write general reference (FC 21) 
+                                // Mask write register (FC 22) 
+                                // Read/write registers (FC 23) 
+                                // Read FIFO queue (FC 24)
+    // 7, 8, 11, 12, 17 are all for Serial Only
+    else {
+        exception = 1;
         FC = fc + 128;
-       DEBUG_PUT_STR(DEBUG_LEVEL_ERROR, " FC not supported: ");
-       DEBUG_PUT_WORD(DEBUG_LEVEL_ERROR, fc);
-       DEBUG_PUT_STR(DEBUG_LEVEL_ERROR, "\n");
-
+        DEBUG_PUT_STR(DEBUG_LEVEL_ERROR, " FC not supported: ");
+        DEBUG_PUT_WORD(DEBUG_LEVEL_ERROR, fc);
+        DEBUG_PUT_STR(DEBUG_LEVEL_ERROR, "\n");
     }
 }
 
 void MB_wFloat(float f, int i){
-    DWORD x = *(DWORD*)&f;   //Place Float (as data, not value) into DWORD var.
+    DWORD x = *(DWORD*)&f;      //Place Float (as data, not value) into DWORD var.
     #ifdef Float_CD_AB
-        MBR[i] = lowWord(x);      //Split DWORD into WORD
+        MBR[i] = lowWord(x);    //Split DWORD into WORD
         MBR[i+1] = highWord(x);
-    #endif
-
-    #ifdef Float_AB_CD
+    #else
         MBR[i+1] = lowWord(x);
         MBR[i] = highWord(x);
     #endif
@@ -595,9 +537,7 @@ float MB_rFloat(int i){
     DWORD x;
     #ifdef Float_CD_AB
         x = wordstoDWord(MBR[i+1],MBR[i]);   //Join 2 WORDs into one DWORD
-    #endif
-
-    #ifdef Float_AB_CD
+    #else
         x = wordstoDWord(MBR[i],MBR[i+1]);
     #endif
     return *(float*)&x;     //Place DWORD (as data, not value) into float var.
