@@ -483,7 +483,7 @@ void MBbuffer_save()
 void MBbuffer_restore() 
 {
     WORD i;
-    for(i=0;i<160;1++){
+    for(i=0;i<160;i++){
         byteReceiveArray[i] = saveArray[i];
     }
 }
@@ -491,7 +491,7 @@ void MBbuffer_restore()
 
 void MBPopulateSendBuffer(BYTE *SendBuffer, WORD NoOfBytes) 
 {
-    WORD i
+    WORD i;
     for(i=0;i<NoOfBytes;i++){
         byteSendArray[noOfBytesToSend] = SendBuffer[i];
         noOfBytesToSend++;
